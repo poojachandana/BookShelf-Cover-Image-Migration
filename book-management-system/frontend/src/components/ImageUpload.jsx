@@ -242,28 +242,36 @@ input[type=range].editor-slider::-webkit-slider-thumb:hover { transform:scale(1.
 .upload-primary-text strong { color:#c9a84c; }
 .upload-secondary-text { font-size:0.72rem; color:#5a5448; font-family:'DM Sans',system-ui,sans-serif; }
 
-.upload-thumb-wrap { position:relative; display:inline-block; }
+/* Image preview with ALWAYS VISIBLE buttons below */
+.upload-thumb-wrap { position:relative; display:inline-block; width:100%; }
 .upload-thumb-wrap img {
   max-height:180px; max-width:100%; border-radius:10px;
   border:1px solid rgba(201,168,76,0.2); display:block;
   box-shadow:0 8px 24px rgba(0,0,0,0.4);
 }
+
+/* Buttons always visible BELOW the image */
 .thumb-actions {
-  position:absolute; inset:0; background:rgba(0,0,0,0.6);
-  border-radius:10px; display:flex; align-items:center;
-  justify-content:center; gap:8px; opacity:0; transition:opacity 0.2s;
+  display:flex; align-items:center; justify-content:center;
+  gap:8px; margin-top:10px;
 }
-.upload-thumb-wrap:hover .thumb-actions { opacity:1; }
 
 .thumb-action-btn {
-  padding:7px 14px; border:none; border-radius:7px;
-  font-size:0.75rem; font-weight:700; cursor:pointer;
+  padding:8px 16px; border:none; border-radius:8px;
+  font-size:0.78rem; font-weight:700; cursor:pointer;
   font-family:'DM Sans',system-ui,sans-serif; transition:all 0.15s;
+  display:flex; align-items:center; gap:6px;
 }
-.thumb-action-btn.edit { background:#c9a84c; color:#0a0908; }
-.thumb-action-btn.edit:hover { background:#e8c96a; }
-.thumb-action-btn.remove { background:rgba(224,82,82,0.9); color:white; }
-.thumb-action-btn.remove:hover { background:#e05252; }
+.thumb-action-btn.edit {
+  background:rgba(201,168,76,0.15); color:#c9a84c;
+  border:1px solid rgba(201,168,76,0.3);
+}
+.thumb-action-btn.edit:hover { background:rgba(201,168,76,0.25); }
+.thumb-action-btn.remove {
+  background:rgba(224,82,82,0.1); color:#e05252;
+  border:1px solid rgba(224,82,82,0.3);
+}
+.thumb-action-btn.remove:hover { background:rgba(224,82,82,0.2); }
 
 .close-x-btn {
   background:none; border:none; color:#8a8070; font-size:1.5rem;
@@ -324,7 +332,6 @@ const SLIDERS = [
 const clamp    = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const MIN_CROP = 30;
 
-// ── Image Editor ──────────────────────────────────────────────────────────────
 function ImageEditor({ src, onApply, onCancel }) {
   const canvasRef  = useRef(null);
   const imgRef     = useRef(null);
@@ -339,25 +346,21 @@ function ImageEditor({ src, onApply, onCancel }) {
   const [dims,   setDims]   = useState({ w:0, h:0 });
   const [crop,   setCrop]   = useState({ x:0, y:0, w:0, h:0 });
 
-  // Load image
   useEffect(() => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       imgRef.current = img;
       setDims({ w:img.naturalWidth, h:img.naturalHeight });
-      // Wait one frame so the area has rendered dimensions
       requestAnimationFrame(() => drawCanvas(img, { ...DEFAULT_ADJ }, 'none'));
     };
     img.src = src;
   }, [src]);
 
-  // Redraw when adjustments or filter change
   useEffect(() => {
     if (imgRef.current) drawCanvas(imgRef.current, adj, filter);
   }, [adj, filter]);
 
-  // Init crop when switching to crop tab
   useEffect(() => {
     if (tab === 'crop' && canvasRef.current && crop.w === 0) {
       setCrop({ x:0, y:0, w:canvasRef.current.width, h:canvasRef.current.height });
@@ -367,39 +370,26 @@ function ImageEditor({ src, onApply, onCancel }) {
   const drawCanvas = (img, a, f) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
-    // Use the canvas-area div for size measurement
     const area = areaRef.current;
     const maxW = (area ? area.clientWidth  : 640) - 10;
     const maxH = (area ? area.clientHeight : 520) - 10;
-
-    // Scale to fill the area (no upper cap of 1 so large images also fill)
     const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
-
     canvas.width  = Math.floor(img.naturalWidth  * scale);
     canvas.height = Math.floor(img.naturalHeight * scale);
-
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.rotate((a.rotate * Math.PI) / 180);
     ctx.scale(a.flipH ? -a.zoom : a.zoom, a.flipV ? -a.zoom : a.zoom);
-
     const fp = FILTERS.find(x => x.id === f) || FILTERS[0];
     ctx.filter = [
-      `brightness(${a.brightness}%)`,
-      `contrast(${a.contrast}%)`,
-      `saturate(${a.saturation}%)`,
-      `blur(${a.blur * 0.4}px)`,
-      `hue-rotate(${a.hue}deg)`,
-      fp.css,
+      `brightness(${a.brightness}%)`,`contrast(${a.contrast}%)`,
+      `saturate(${a.saturation}%)`,`blur(${a.blur * 0.4}px)`,
+      `hue-rotate(${a.hue}deg)`,fp.css,
     ].filter(Boolean).join(' ');
-
     ctx.drawImage(img, -canvas.width / 2, -canvas.height / 2, canvas.width, canvas.height);
     ctx.restore();
-
-    // Reset crop to full canvas after redraw
     setCrop({ x:0, y:0, w:canvas.width, h:canvas.height });
   };
 
@@ -423,7 +413,6 @@ function ImageEditor({ src, onApply, onCancel }) {
     setAspect('free');
   };
 
-  // Mouse/touch helpers
   const getPos = (e) => {
     const rect = wrapperRef.current?.getBoundingClientRect();
     if (!rect) return { x:0, y:0 };
@@ -433,8 +422,7 @@ function ImageEditor({ src, onApply, onCancel }) {
   };
 
   const onMouseDown = useCallback((e, type) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     const pos = getPos(e);
     dragRef.current = { type, startX:pos.x, startY:pos.y, startCrop:{ ...crop } };
   }, [crop]);
@@ -451,7 +439,6 @@ function ImageEditor({ src, onApply, onCancel }) {
     const ar   = ASPECTS.find(x => x.id === aspect)?.ratio || null;
     let { x, y, w, h } = sc;
     const type = dragRef.current.type;
-
     if (type === 'move') {
       x = clamp(sc.x + dx, 0, cw - w);
       y = clamp(sc.y + dy, 0, ch - h);
@@ -473,25 +460,21 @@ function ImageEditor({ src, onApply, onCancel }) {
 
   const onMouseUp = useCallback(() => { dragRef.current = null; }, []);
 
-  // Apply — export cropped + adjusted image
   const handleApply = () => {
     const img = imgRef.current;
     if (!img) return;
-    const canvas  = canvasRef.current;
-    const scaleX  = img.naturalWidth  / canvas.width;
-    const scaleY  = img.naturalHeight / canvas.height;
-    const out     = document.createElement('canvas');
-    out.width     = Math.round(crop.w * scaleX);
-    out.height    = Math.round(crop.h * scaleY);
-    const ctx     = out.getContext('2d');
-    const fp      = FILTERS.find(x => x.id === filter) || FILTERS[0];
-    ctx.filter    = [
-      `brightness(${adj.brightness}%)`,
-      `contrast(${adj.contrast}%)`,
-      `saturate(${adj.saturation}%)`,
-      `blur(${adj.blur * 0.4}px)`,
-      `hue-rotate(${adj.hue}deg)`,
-      fp.css,
+    const canvas = canvasRef.current;
+    const scaleX = img.naturalWidth  / canvas.width;
+    const scaleY = img.naturalHeight / canvas.height;
+    const out    = document.createElement('canvas');
+    out.width    = Math.round(crop.w * scaleX);
+    out.height   = Math.round(crop.h * scaleY);
+    const ctx    = out.getContext('2d');
+    const fp     = FILTERS.find(x => x.id === filter) || FILTERS[0];
+    ctx.filter   = [
+      `brightness(${adj.brightness}%)`,`contrast(${adj.contrast}%)`,
+      `saturate(${adj.saturation}%)`,`blur(${adj.blur * 0.4}px)`,
+      `hue-rotate(${adj.hue}deg)`,fp.css,
     ].filter(Boolean).join(' ');
     ctx.drawImage(img, crop.x * scaleX, crop.y * scaleY, crop.w * scaleX, crop.h * scaleY, 0, 0, out.width, out.height);
     out.toBlob(blob => {
@@ -502,9 +485,7 @@ function ImageEditor({ src, onApply, onCancel }) {
   };
 
   const handleReset = () => {
-    setAdj({ ...DEFAULT_ADJ });
-    setFilter('none');
-    setAspect('free');
+    setAdj({ ...DEFAULT_ADJ }); setFilter('none'); setAspect('free');
     if (imgRef.current) drawCanvas(imgRef.current, { ...DEFAULT_ADJ }, 'none');
   };
 
@@ -515,53 +496,31 @@ function ImageEditor({ src, onApply, onCancel }) {
   return (
     <div className="img-editor-overlay">
       <div className="img-editor-modal" onClick={stopProp} onMouseDown={stopProp}>
-
-        {/* Header */}
         <div className="img-editor-header">
-          <div className="img-editor-title">
-            🎨 Image Editor <span>Live Preview</span>
-          </div>
+          <div className="img-editor-title">🎨 Image Editor <span>Live Preview</span></div>
           <button type="button" className="close-x-btn" onClick={onCancel}>×</button>
         </div>
-
-        {/* Body */}
         <div className="img-editor-body">
-
-          {/* Canvas area */}
-          <div
-            className="img-editor-canvas-area"
-            ref={areaRef}
-            onMouseMove={tab === 'crop' ? onMouseMove : undefined}
-            onMouseUp={tab === 'crop' ? onMouseUp : undefined}
-            onMouseLeave={tab === 'crop' ? onMouseUp : undefined}
-            onTouchMove={tab === 'crop' ? onMouseMove : undefined}
-            onTouchEnd={tab === 'crop' ? onMouseUp : undefined}
-          >
+          <div className="img-editor-canvas-area" ref={areaRef}
+            onMouseMove={tab==='crop'?onMouseMove:undefined}
+            onMouseUp={tab==='crop'?onMouseUp:undefined}
+            onMouseLeave={tab==='crop'?onMouseUp:undefined}
+            onTouchMove={tab==='crop'?onMouseMove:undefined}
+            onTouchEnd={tab==='crop'?onMouseUp:undefined}>
             <div className="crop-wrapper" ref={wrapperRef}>
               <canvas ref={canvasRef} />
-
-              {/* Crop overlay */}
-              {tab === 'crop' && crop.w > 0 && (
+              {tab==='crop' && crop.w>0 && (
                 <>
-                  {/* Dark masks around crop box */}
                   <div style={{position:'absolute',top:0,left:0,width:cw,height:crop.y,background:'rgba(0,0,0,0.6)',pointerEvents:'none'}} />
                   <div style={{position:'absolute',top:crop.y+crop.h,left:0,width:cw,height:ch-(crop.y+crop.h),background:'rgba(0,0,0,0.6)',pointerEvents:'none'}} />
                   <div style={{position:'absolute',top:crop.y,left:0,width:crop.x,height:crop.h,background:'rgba(0,0,0,0.6)',pointerEvents:'none'}} />
                   <div style={{position:'absolute',top:crop.y,left:crop.x+crop.w,width:cw-(crop.x+crop.w),height:crop.h,background:'rgba(0,0,0,0.6)',pointerEvents:'none'}} />
-
-                  {/* Crop box */}
-                  <div
-                    className="crop-box"
-                    style={{left:crop.x,top:crop.y,width:crop.w,height:crop.h}}
-                    onMouseDown={e => onMouseDown(e, 'move')}
-                    onTouchStart={e => onMouseDown(e, 'move')}
-                  >
-                    {/* Rule of thirds */}
+                  <div className="crop-box" style={{left:crop.x,top:crop.y,width:crop.w,height:crop.h}}
+                    onMouseDown={e=>onMouseDown(e,'move')} onTouchStart={e=>onMouseDown(e,'move')}>
                     <div className="crop-grid-line" style={{left:'33.33%',top:0,width:1,height:'100%'}} />
                     <div className="crop-grid-line" style={{left:'66.66%',top:0,width:1,height:'100%'}} />
                     <div className="crop-grid-line" style={{top:'33.33%',left:0,height:1,width:'100%'}} />
                     <div className="crop-grid-line" style={{top:'66.66%',left:0,height:1,width:'100%'}} />
-                    {/* 8 handles */}
                     <div className="crop-handle tl" onMouseDown={e=>onMouseDown(e,'tl')} onTouchStart={e=>onMouseDown(e,'tl')} />
                     <div className="crop-handle tc" onMouseDown={e=>onMouseDown(e,'t')}  onTouchStart={e=>onMouseDown(e,'t')}  />
                     <div className="crop-handle tr" onMouseDown={e=>onMouseDown(e,'tr')} onTouchStart={e=>onMouseDown(e,'tr')} />
@@ -575,75 +534,47 @@ function ImageEditor({ src, onApply, onCancel }) {
               )}
             </div>
           </div>
-
-          {/* Controls */}
           <div className="img-editor-controls">
             <div className="mode-tabs">
-              {[
-                {id:'adjust',icon:'⚙️',label:'Adjust'},
-                {id:'filter',icon:'✨',label:'Filter'},
-                {id:'crop',  icon:'✂️',label:'Crop'  },
-                {id:'rotate',icon:'↻', label:'Rotate'},
-              ].map(t => (
-                <button type="button" key={t.id}
-                  className={`mode-tab ${tab===t.id?'active':''}`}
-                  onClick={() => setTab(t.id)}>
+              {[{id:'adjust',icon:'⚙️',label:'Adjust'},{id:'filter',icon:'✨',label:'Filter'},{id:'crop',icon:'✂️',label:'Crop'},{id:'rotate',icon:'↻',label:'Rotate'}].map(t=>(
+                <button type="button" key={t.id} className={`mode-tab ${tab===t.id?'active':''}`} onClick={()=>setTab(t.id)}>
                   {t.icon}<br/>{t.label}
                 </button>
               ))}
             </div>
-
-            {/* ADJUST */}
-            {tab === 'adjust' && (
+            {tab==='adjust' && (
               <div className="ctrl-section">
                 <div className="ctrl-title">Adjustments</div>
-                {SLIDERS.map(s => (
+                {SLIDERS.map(s=>(
                   <div className="slider-row" key={s.key}>
                     <div className="slider-label-row">
                       <span className="slider-label">{s.label}</span>
                       <div style={{display:'flex',alignItems:'center',gap:4}}>
-                        <span className="slider-value">
-                          {s.step < 1 ? Number(adj[s.key]).toFixed(2) : Math.round(adj[s.key])}{s.unit}
-                        </span>
-                        <button type="button" className="slider-reset-btn"
-                          onClick={() => setOne(s.key, s.def)}>↺</button>
+                        <span className="slider-value">{s.step<1?Number(adj[s.key]).toFixed(2):Math.round(adj[s.key])}{s.unit}</span>
+                        <button type="button" className="slider-reset-btn" onClick={()=>setOne(s.key,s.def)}>↺</button>
                       </div>
                     </div>
-                    <input type="range" className="editor-slider"
-                      min={s.min} max={s.max} step={s.step} value={adj[s.key]}
-                      onChange={e => setOne(s.key, parseFloat(e.target.value))} />
+                    <input type="range" className="editor-slider" min={s.min} max={s.max} step={s.step} value={adj[s.key]} onChange={e=>setOne(s.key,parseFloat(e.target.value))} />
                   </div>
                 ))}
               </div>
             )}
-
-            {/* FILTER */}
-            {tab === 'filter' && (
+            {tab==='filter' && (
               <div className="ctrl-section">
                 <div className="ctrl-title">Presets</div>
                 <div className="filter-grid">
-                  {FILTERS.map(f => (
-                    <button type="button" key={f.id}
-                      className={`filter-btn ${filter===f.id?'active':''}`}
-                      onClick={() => setFilter(f.id)}>
-                      {f.name}
-                    </button>
+                  {FILTERS.map(f=>(
+                    <button type="button" key={f.id} className={`filter-btn ${filter===f.id?'active':''}`} onClick={()=>setFilter(f.id)}>{f.name}</button>
                   ))}
                 </div>
               </div>
             )}
-
-            {/* CROP */}
-            {tab === 'crop' && (
+            {tab==='crop' && (
               <div className="ctrl-section">
                 <div className="ctrl-title">Aspect Ratio</div>
                 <div className="aspect-grid">
-                  {ASPECTS.map(a => (
-                    <button type="button" key={a.id}
-                      className={`aspect-btn ${aspect===a.id?'active':''}`}
-                      onClick={() => applyAspect(a.id)}>
-                      {a.label}
-                    </button>
+                  {ASPECTS.map(a=>(
+                    <button type="button" key={a.id} className={`aspect-btn ${aspect===a.id?'active':''}`} onClick={()=>applyAspect(a.id)}>{a.label}</button>
                   ))}
                 </div>
                 <div className="crop-info-box">
@@ -656,21 +587,17 @@ function ImageEditor({ src, onApply, onCancel }) {
                 <div style={{marginTop:'0.75rem',textAlign:'center',fontSize:'0.7rem',color:'#c9a84c',fontFamily:'DM Mono,monospace'}}>
                   {Math.round(crop.w)} × {Math.round(crop.h)} px
                 </div>
-                <button type="button" className="crop-reset-btn" onClick={resetCrop}>
-                  ↺ Reset Crop
-                </button>
+                <button type="button" className="crop-reset-btn" onClick={resetCrop}>↺ Reset Crop</button>
               </div>
             )}
-
-            {/* ROTATE */}
-            {tab === 'rotate' && (
+            {tab==='rotate' && (
               <div className="ctrl-section">
                 <div className="ctrl-title">Rotate & Flip</div>
                 <div className="transform-grid">
-                  <button type="button" className="transform-btn" onClick={() => rotate(-90)}>↺<span>Left 90°</span></button>
-                  <button type="button" className="transform-btn" onClick={() => rotate(90)}>↻<span>Right 90°</span></button>
-                  <button type="button" className="transform-btn" onClick={() => setOne('flipH',!adj.flipH)}>↔️<span>Flip H {adj.flipH?'✓':''}</span></button>
-                  <button type="button" className="transform-btn" onClick={() => setOne('flipV',!adj.flipV)}>↕️<span>Flip V {adj.flipV?'✓':''}</span></button>
+                  <button type="button" className="transform-btn" onClick={()=>rotate(-90)}>↺<span>Left 90°</span></button>
+                  <button type="button" className="transform-btn" onClick={()=>rotate(90)}>↻<span>Right 90°</span></button>
+                  <button type="button" className="transform-btn" onClick={()=>setOne('flipH',!adj.flipH)}>↔️<span>Flip H {adj.flipH?'✓':''}</span></button>
+                  <button type="button" className="transform-btn" onClick={()=>setOne('flipV',!adj.flipV)}>↕️<span>Flip V {adj.flipV?'✓':''}</span></button>
                 </div>
                 <div style={{marginTop:'1.2rem'}}>
                   <div className="ctrl-title">Fine Rotation</div>
@@ -679,21 +606,15 @@ function ImageEditor({ src, onApply, onCancel }) {
                       <span className="slider-label">Angle</span>
                       <span className="slider-value">{adj.rotate}°</span>
                     </div>
-                    <input type="range" className="editor-slider"
-                      min={-180} max={180} step={1} value={adj.rotate}
-                      onChange={e => setOne('rotate', parseInt(e.target.value))} />
+                    <input type="range" className="editor-slider" min={-180} max={180} step={1} value={adj.rotate} onChange={e=>setOne('rotate',parseInt(e.target.value))} />
                   </div>
                 </div>
               </div>
             )}
           </div>
         </div>
-
-        {/* Footer */}
         <div className="img-editor-footer">
-          <div className="editor-info">
-            {dims.w > 0 ? `${dims.w} × ${dims.h} px` : ''}
-          </div>
+          <div className="editor-info">{dims.w>0?`${dims.w} × ${dims.h} px`:''}</div>
           <div className="editor-footer-btns">
             <button type="button" className="editor-btn-cancel" onClick={onCancel}>Cancel</button>
             <button type="button" className="editor-btn-reset"  onClick={handleReset}>↺ Reset All</button>
@@ -705,7 +626,6 @@ function ImageEditor({ src, onApply, onCancel }) {
   );
 }
 
-// ── Main ImageUpload Component ────────────────────────────────────────────────
 function ImageUpload({ value, onChange, existingUrl }) {
   const [preview,    setPreview]  = useState(null);
   const [rawSrc,     setRawSrc]   = useState(null);
@@ -749,14 +669,16 @@ function ImageUpload({ value, onChange, existingUrl }) {
         <div style={{marginBottom:10}}>
           <div className="upload-thumb-wrap">
             <img src={preview} alt="Cover preview" />
+            {/* Buttons always visible below image */}
             <div className="thumb-actions">
               <button type="button" className="thumb-action-btn edit"
-                onClick={() => { setRawSrc(preview); setEditor(true); }}>🎨 Edit</button>
-              <button type="button" className="thumb-action-btn remove" onClick={handleRemove}>✕ Remove</button>
+                onClick={() => { setRawSrc(preview); setEditor(true); }}>
+                🎨 Edit Image
+              </button>
+              <button type="button" className="thumb-action-btn remove" onClick={handleRemove}>
+                🗑️ Remove
+              </button>
             </div>
-          </div>
-          <div style={{marginTop:8,fontSize:'0.78rem',color:'#c9a84c',background:'rgba(201,168,76,0.08)',padding:'7px 12px',borderRadius:8,border:'1px solid rgba(201,168,76,0.2)',fontFamily:'DM Sans,system-ui,sans-serif'}}>
-            ✅ Image ready · Hover to <strong>Edit</strong> or <strong>Remove</strong>
           </div>
         </div>
       )}
@@ -765,15 +687,17 @@ function ImageUpload({ value, onChange, existingUrl }) {
         <div style={{marginBottom:10}}>
           <div className="upload-thumb-wrap">
             <img src={existingUrl} alt="Current cover" onError={() => setRemoved(true)} />
+            {/* Buttons always visible below image */}
             <div className="thumb-actions">
               <button type="button" className="thumb-action-btn edit"
-                onClick={() => { setRawSrc(existingUrl); setEditor(true); }}>🎨 Edit</button>
-              <button type="button" className="thumb-action-btn remove" onClick={handleRemove}>✕ Remove</button>
+                onClick={() => { setRawSrc(existingUrl); setEditor(true); }}>
+                🎨 Edit Image
+              </button>
+              <button type="button" className="thumb-action-btn remove" onClick={handleRemove}>
+                🗑️ Remove
+              </button>
             </div>
           </div>
-          <p style={{marginTop:8,fontSize:'0.75rem',color:'#8a8070',fontFamily:'DM Sans,system-ui,sans-serif'}}>
-            Hover over image to edit or remove
-          </p>
         </div>
       )}
 
