@@ -24,6 +24,8 @@ const buildImageUrl = (req, filename) => {
   if (!filename) return null;
   if (filename === 'null') return null;
   if (filename.startsWith('/images/')) return null;
+  // Cloudinary URLs start with https
+  if (filename.startsWith('http')) return filename;
   return `${req.protocol}://${req.get('host')}/uploads/${filename}`;
 };
 
