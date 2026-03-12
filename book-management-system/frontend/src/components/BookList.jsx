@@ -166,9 +166,7 @@ function BookList({ onEdit, onAdd }) {
 
 function BookCard({ book, index, onEdit, onDelete, deleting }) {
   const [imgErr, setImgErr] = useState(false);
-  const coverUrl = !imgErr && hasRealCover(book)
-    ? `https://bookshelf-cover-image-migration.onrender.com/uploads/${book.cover_image}`
-    : null;
+  const coverUrl = book.cover_image;
 
   return (
     <div className="book-card" style={{ animationDelay: `${index * 0.06}s` }}>
