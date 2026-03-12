@@ -167,7 +167,7 @@ function BookList({ onEdit, onAdd }) {
 function BookCard({ book, index, onEdit, onDelete, deleting }) {
   const [imgErr, setImgErr] = useState(false);
   const coverUrl = !imgErr && hasRealCover(book)
-    ? `http://localhost:5000/uploads/${book.cover_image}`
+    ? `https://bookshelf-cover-image-migration.onrender.com/uploads/${book.cover_image}`
     : null;
 
   return (
