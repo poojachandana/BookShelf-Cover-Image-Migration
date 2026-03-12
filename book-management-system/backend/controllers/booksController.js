@@ -1,166 +1,179 @@
-const db   = require('../db');
-const path = require('path');
-const fs   = require('fs');
+const db = require('../db');
 
-// ── Delete image file helper ──────────────────────────────────
-const deleteImageFile = (coverImage) => {
+// Build image URL - Cloudinary returns full https URL
+const buildImageUrl = (cover_image) => {
+  if (!cover_image) return null;
+  if (cover_image === 'null') return null;
+  if (cover_image.startsWith('/images/')) return null;
+  if (cover_image.startsWith('http')) return cover_image;
+  return null;
+};
+
+// Delete image from Cloudinary
+const deleteCloudinaryImage = async (cover_image) => {
+  if (!cover_image) return;
+  if (!cover_image.startsWith('http')) return;
   try {
-    if (!coverImage) return;
-    if (coverImage.startsWith('/images/')) return;
-    if (coverImage.startsWith('http')) return;
-    const filename = path.basename(coverImage);
-    const filePath = path.join(__dirname, '..', 'uploads', filename);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      console.log('Deleted file:', filename);
-    }
+    const cloudinary = require('cloudinary').v2;
+    // Extract public_id from URL
+    // URL format: https://res.cloudinary.com/cloud/image/upload/v123/book-covers/filename.jpg
+    const parts = cover_image.split('/');
+    const filename = parts[parts.length - 1].split('.')[0];
+    const folder = parts[parts.length - 2];
+    const public_id = `${folder}/${filename}`;
+    await cloudinary.uploader.destroy(public_id);
+    console.log('Deleted from Cloudinary:', public_id);
   } catch (err) {
-    console.error('Error deleting file:', err.message);
+    console.error('Cloudinary delete error:', err.message);
   }
 };
 
-// ── Build image URL helper ────────────────────────────────────
-const buildImageUrl = (req, filename) => {
-  if (!filename) return null;
-  if (filename === 'null') return null;
-  if (filename.startsWith('/images/')) return null;
-  // Cloudinary URLs start with https
-  if (filename.startsWith('http')) return filename;
-  return `${req.protocol}://${req.get('host')}/uploads/${filename}`;
-};
-
-// ── GET all books ─────────────────────────────────────────────
-exports.getAllBooks = async (req, res) => {
+// GET all books
+const getAllBooks = async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM books ORDER BY created_at DESC');
-    const books = rows.map(b => ({
-      ...b,
-      cover_image_url: buildImageUrl(req, b.cover_image),
+    const [rows] = await db.query(
+      'SELECT id, title, author, published_year, cover_image, created_at, updated_at FROM books ORDER BY created_at DESC'
+    );
+    const books = rows.map(book => ({
+      ...book,
+      cover_image_url: buildImageUrl(book.cover_image),
     }));
-    res.json({ success: true, count: books.length, data: books });
+    res.json({ success: true, data: books, count: books.length });
   } catch (err) {
     console.error('getAllBooks error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Failed to fetch books' });
   }
 };
 
-// ── GET single book ───────────────────────────────────────────
-exports.getBookById = async (req, res) => {
+// GET single book
+const getBookById = async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM books WHERE id = ?', [req.params.id]);
-    if (!rows.length) {
+    if (rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Book not found' });
     }
-    const book = { ...rows[0], cover_image_url: buildImageUrl(req, rows[0].cover_image) };
+    const book = rows[0];
+    book.cover_image_url = buildImageUrl(book.cover_image);
     res.json({ success: true, data: book });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('getBookById error:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch book' });
   }
 };
 
-// ── CREATE book ───────────────────────────────────────────────
-exports.createBook = async (req, res) => {
+// POST create book
+const createBook = async (req, res) => {
   try {
-    console.log('=== CREATE BOOK ===');
-    console.log('Body:', req.body);
-    console.log('File:', req.file ? req.file.filename : 'none');
+    console.log('createBook body:', req.body);
+    console.log('createBook file:', req.file);
 
-    const title          = req.body.title;
-    const author         = req.body.author;
-    const published_year = req.body.published_year;
+    const { title, author, published_year } = req.body;
 
-    if (!title || title.trim() === '') {
-      return res.status(400).json({ success: false, message: 'Title is required' });
-    }
-    if (!author || author.trim() === '') {
-      return res.status(400).json({ success: false, message: 'Author is required' });
-    }
-    if (!published_year) {
-      return res.status(400).json({ success: false, message: 'Published year is required' });
+    if (!title || !author || !published_year) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title, author, and published year are required',
+      });
     }
 
     const year = parseInt(published_year);
-    if (isNaN(year)) {
-      return res.status(400).json({ success: false, message: 'Year must be a number' });
+    if (isNaN(year) || year < 1000 || year > new Date().getFullYear() + 1) {
+      return res.status(400).json({ success: false, message: 'Invalid published year' });
     }
 
-    const coverImage = req.file ? req.file.filename : null;
+    // Cloudinary stores full URL in req.file.path
+    const cover_image = req.file ? req.file.path : null;
 
     const [result] = await db.query(
       'INSERT INTO books (title, author, published_year, cover_image) VALUES (?, ?, ?, ?)',
-      [title.trim(), author.trim(), year, coverImage]
+      [title.trim(), author.trim(), year, cover_image]
     );
 
-    const [rows] = await db.query('SELECT * FROM books WHERE id = ?', [result.insertId]);
-    const book = { ...rows[0], cover_image_url: buildImageUrl(req, rows[0].cover_image) };
+    const [newBook] = await db.query('SELECT * FROM books WHERE id = ?', [result.insertId]);
+    const book = newBook[0];
+    book.cover_image_url = buildImageUrl(book.cover_image);
 
-    console.log('Book created:', book.title);
-    res.status(201).json({ success: true, message: 'Book created successfully', data: book });
-
+    res.status(201).json({ success: true, data: book, message: 'Book created successfully' });
   } catch (err) {
-    if (req.file) deleteImageFile(req.file.filename);
-    console.error('createBook error:', err.message);
-    res.status(500).json({ success: false, message: err.message });
+    console.error('createBook error:', err);
+    res.status(500).json({ success: false, message: 'Failed to create book' });
   }
 };
 
-// ── UPDATE book ───────────────────────────────────────────────
-exports.updateBook = async (req, res) => {
-  const { title, author, published_year, remove_image } = req.body;
-  const { id } = req.params;
-
+// PUT update book
+const updateBook = async (req, res) => {
   try {
+    const { id } = req.params;
+    console.log('updateBook body:', req.body);
+    console.log('updateBook file:', req.file);
+
     const [existing] = await db.query('SELECT * FROM books WHERE id = ?', [id]);
-    if (!existing.length) {
-      if (req.file) deleteImageFile(req.file.filename);
+    if (existing.length === 0) {
       return res.status(404).json({ success: false, message: 'Book not found' });
     }
 
-    const oldBook     = existing[0];
-    const newTitle    = title          ? title.trim()             : oldBook.title;
-    const newAuthor   = author         ? author.trim()            : oldBook.author;
-    const newYear     = published_year ? parseInt(published_year) : oldBook.published_year;
-    let newCoverImage = oldBook.cover_image;
+    const { title, author, published_year, remove_image } = req.body;
+
+    if (!title || !author || !published_year) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title, author, and published year are required',
+      });
+    }
+
+    const year = parseInt(published_year);
+    if (isNaN(year) || year < 1000 || year > new Date().getFullYear() + 1) {
+      return res.status(400).json({ success: false, message: 'Invalid published year' });
+    }
+
+    let cover_image = existing[0].cover_image;
 
     if (req.file) {
-      deleteImageFile(oldBook.cover_image);
-      newCoverImage = req.file.filename;
+      // New image uploaded - delete old from Cloudinary
+      await deleteCloudinaryImage(existing[0].cover_image);
+      cover_image = req.file.path; // Cloudinary full URL
     } else if (remove_image === 'true') {
-      deleteImageFile(oldBook.cover_image);
-      newCoverImage = null;
+      // Remove image - delete from Cloudinary
+      await deleteCloudinaryImage(existing[0].cover_image);
+      cover_image = null;
     }
+    // else keep existing cover_image
 
     await db.query(
       'UPDATE books SET title = ?, author = ?, published_year = ?, cover_image = ? WHERE id = ?',
-      [newTitle, newAuthor, newYear, newCoverImage, id]
+      [title.trim(), author.trim(), year, cover_image, id]
     );
 
-    const [updated] = await db.query('SELECT * FROM books WHERE id = ?', [id]);
-    const book = { ...updated[0], cover_image_url: buildImageUrl(req, updated[0].cover_image) };
-    res.json({ success: true, message: 'Book updated successfully', data: book });
+    const [updatedBook] = await db.query('SELECT * FROM books WHERE id = ?', [id]);
+    const book = updatedBook[0];
+    book.cover_image_url = buildImageUrl(book.cover_image);
 
+    res.json({ success: true, data: book, message: 'Book updated successfully' });
   } catch (err) {
-    if (req.file) deleteImageFile(req.file.filename);
-    console.error('updateBook error:', err.message);
-    res.status(500).json({ success: false, message: err.message });
+    console.error('updateBook error:', err);
+    res.status(500).json({ success: false, message: 'Failed to update book' });
   }
 };
 
-// ── DELETE book ───────────────────────────────────────────────
-exports.deleteBook = async (req, res) => {
+// DELETE book
+const deleteBook = async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM books WHERE id = ?', [req.params.id]);
-    if (!rows.length) {
+    const [existing] = await db.query('SELECT * FROM books WHERE id = ?', [req.params.id]);
+    if (existing.length === 0) {
       return res.status(404).json({ success: false, message: 'Book not found' });
     }
 
-    const book = rows[0];
+    // Delete from DB first
     await db.query('DELETE FROM books WHERE id = ?', [req.params.id]);
-    deleteImageFile(book.cover_image);
+
+    // Then delete image from Cloudinary
+    await deleteCloudinaryImage(existing[0].cover_image);
 
     res.json({ success: true, message: 'Book deleted successfully' });
   } catch (err) {
-    console.error('deleteBook error:', err.message);
-    res.status(500).json({ success: false, message: err.message });
+    console.error('deleteBook error:', err);
+    res.status(500).json({ success: false, message: 'Failed to delete book' });
   }
 };
+
+module.exports = { getAllBooks, getBookById, createBook, updateBook, deleteBook };
