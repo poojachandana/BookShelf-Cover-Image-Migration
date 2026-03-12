@@ -1,11 +1,17 @@
 const db = require('../db');
 
 // Build image URL - Cloudinary returns full https URL
+
 const buildImageUrl = (cover_image) => {
   if (!cover_image) return null;
   if (cover_image === 'null') return null;
   if (cover_image.startsWith('/images/')) return null;
+  // Already full URL
   if (cover_image.startsWith('http')) return cover_image;
+  // Cloudinary partial path like "book-covers/imageid"
+  if (cover_image.startsWith('book-covers/')) {
+    return `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/image/upload/${cover_image}`;
+  }
   return null;
 };
 
