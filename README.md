@@ -16,8 +16,8 @@ PROJECT LINK - https://bookshelf-cover-image-migration.netlify.app/
 
 | Service | URL |
 |---------|-----|
-| 🖥️ Frontend | [Netlify Deployment](https://your-netlify-url.netlify.app) |
-| ⚙️ Backend | [https://bookshelf-cover-image-migration.onrender.com](https://bookshelf-cover-image-migration.onrender.com) |
+| 🖥️ Frontend | [Netlify Deployment](https://bookshelf-cover-image-migration.netlify.app/) |
+| ⚙️ Backend | [https://bookshelf-cover-image-migration.onrender.com](https://dashboard.render.com/web/srv-d6p45rkr85hc739e9eh0) |
 | 🗄️ Database | Railway MySQL |
 | 🖼️ Images | Cloudinary CDN |
 
